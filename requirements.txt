@@ -1,0 +1,33 @@
+# Core
+Django
+djangorestframework
+django-cors-headers
+python-dotenv
+
+# Background jobs
+celery
+redis
+
+# CV / video
+opencv-python-headless
+moviepy
+ffmpeg-python
+numpy
+
+# Deep learning (CPU default wheel).
+# If you need CUDA, see note below to install from the PyTorch index.
+torch
+torchvision
+
+# Football Analytics
+ultralytics
+matplotlib
+tqdm
+timm
+transformers
+sentencepiece
+gdown
+supervision
+more_itertools
+scikit-learn
+umap-learn
