@@ -9,7 +9,9 @@ celery
 redis
 
 # CV / video
-opencv-python-headless
+opencv-python-headless==4.10.0.84
+python-dotenv~=1.0.0
+numpy>=2.0,<2.3
 moviepy
 ffmpeg-python
 numpy
@@ -18,6 +20,13 @@ numpy
 # If you need CUDA, see note below to install from the PyTorch index.
 torch
 torchvision
+
+# Jupyter kernel for this venv
+ipykernel
+
+# Inference toolkit with extras
+# (transformers, SAM, CLIP, gaze, GroundingDINO)
+inference[transformers,sam,clip,gaze,grounding-dino]
 
 # Football Analytics
 ultralytics

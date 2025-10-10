@@ -21,14 +21,6 @@ def create_batches(
 ) -> Generator[List[V], None, None]:
     """
     Generate batches from a sequence with a specified batch size.
-
-    Args:
-        sequence (Iterable[V]): The input sequence to be batched.
-        batch_size (int): The size of each batch.
-
-    Yields:
-        Generator[List[V], None, None]: A generator yielding batches of the input
-            sequence.
     """
     batch_size = max(batch_size, 1)
     current_batch = []
@@ -56,24 +48,18 @@ class TeamClassifier:
        """
         self.device = device
         self.batch_size = batch_size
-        #self.features_model = SiglipVisionModel.from_pretrained(
-        #    SIGLIP_MODEL_PATH).to(device)
+        #self.features_model = SiglipVisionModel.from_pretrained(SIGLIP_MODEL_PATH).to(device)
         #self.processor = AutoProcessor.from_pretrained(SIGLIP_MODEL_PATH, use_fast=True)
         self.features_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
         self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
         self.reducer = umap.UMAP(n_components=3)
         self.cluster_model = KMeans(n_clusters=2)
 
+
     def extract_features(self, crops: List[np.ndarray]) -> np.ndarray:
         """
-        Extract features from a list of image crops using the pre-trained
-            SiglipVisionModel.
-
-        Args:
-            crops (List[np.ndarray]): List of image crops.
-
-        Returns:
-            np.ndarray: Extracted features as a numpy array.
+        Extract features from a list of image crops using the pre-trained SiglipVisionModel.
+        Returns: np.ndarray: Extracted features as a numpy array.
         """
         crops = [sv.cv2_to_pillow(crop) for crop in crops]
         batches = create_batches(crops, self.batch_size)
@@ -98,23 +84,16 @@ class TeamClassifier:
     def fit(self, crops: List[np.ndarray]) -> None:
         """
         Fit the classifier model on a list of image crops.
-
-        Args:
-            crops (List[np.ndarray]): List of image crops.
         """
         data = self.extract_features(crops)
         projections = self.reducer.fit_transform(data)
         self.cluster_model.fit(projections)
 
+
     def predict(self, crops: List[np.ndarray]) -> np.ndarray:
         """
         Predict the cluster labels for a list of image crops.
-
-        Args:
-            crops (List[np.ndarray]): List of image crops.
-
-        Returns:
-            np.ndarray: Predicted cluster labels.
+        Returns: np.ndarray: Predicted cluster labels.
         """
         if len(crops) == 0:
             return np.array([])

@@ -1,10 +1,8 @@
 import numpy as np
 from sklearn.cluster import KMeans
-import pickle
-import os
 from .team import TeamClassifier
 from collections import deque, Counter
-from utils import get_center_of_bbox, measure_distance
+from ..utils import get_center_of_bbox, measure_distance
 
 
 class TeamAssigner:
@@ -12,12 +10,7 @@ class TeamAssigner:
         self.team_classifier = TeamClassifier(device=device, batch_size=batch_size)
 
 
-    def collect_crops_from_tracks(self, tracks, video_frames, read_from_stub, stub_path):
-        if read_from_stub and stub_path is not None and os.path.exists(stub_path):
-            print(f"Loading crops and player info from {stub_path}...")
-            with open(stub_path, 'rb') as f:
-                fitting_crops, all_crops, player_info = pickle.load(f)
-            return fitting_crops, all_crops, player_info
+    def collect_crops_from_tracks(self, tracks, video_frames):
 
         # Otherwise, compute crops fresh
         all_crops = []
@@ -35,20 +28,13 @@ class TeamAssigner:
                 if frame_num % 30 == 0:  # fitting crop sampling
                     fitting_crops.append(crop)
 
-        # Save the results for next time
-        if stub_path is not None:
-            print(f"Saving crops and player info to {stub_path}...")
-            with open(stub_path, 'wb') as f:
-                pickle.dump((fitting_crops, all_crops, player_info), f)
-
         return fitting_crops, all_crops, player_info
     
 
-    def assign_teams(self, tracks, video_frames, read_from_stub=False, stub_path=None):
+
+    def assign_teams(self, tracks, video_frames):
         # 1. Collect crops
-        fitting_crops, all_crops, player_info = self.collect_crops_from_tracks(
-            tracks, video_frames, read_from_stub, stub_path
-        )
+        fitting_crops, all_crops, player_info = self.collect_crops_from_tracks(tracks, video_frames)
 
         # 2. Fit the team classifier using only fitting_crops
         self.team_classifier.fit(fitting_crops)
@@ -57,11 +43,10 @@ class TeamAssigner:
         team_ids = self.team_classifier.predict(all_crops)
 
         team_colors = {
-            0: (0, 191, 255),  # DeepSkyBlue
-            1: (255, 20, 147)  # DeepPink
+            0: (0, 191, 255),
+            1: (255, 20, 147)  
         }
-
-        history = {} #amazing idea have to write ab it
+        history = {}
 
         # 4. Assign predicted teams back to all players
         for (frame_num, player_id), raw_team in zip(player_info, team_ids):

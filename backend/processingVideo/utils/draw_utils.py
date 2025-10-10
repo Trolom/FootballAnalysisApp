@@ -1,4 +1,4 @@
-from utils import get_center_of_bbox, get_bbox_width
+from . import get_center_of_bbox, get_bbox_width
 import numpy as np
 import cv2
 

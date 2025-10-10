@@ -4,13 +4,13 @@ import pickle
 import os
 import sys
 sys.path.append('../')
-from utils import get_center_of_bbox, get_foot_position, draw_ellipse, draw_triangle, measure_distance, draw_team_ball_control
+from ..utils import get_center_of_bbox, get_foot_position, draw_ellipse, draw_triangle, measure_distance, draw_team_ball_control
 import cv2
 import numpy as np
 import pandas as pd
 
 class Tracker:
-    def __init__(self, model_path):
+    def __init__(self, model_path: str = 'models/player_detection.pt'):
         self.model = YOLO(model_path)
         self.tracker = sv.ByteTrack()
         self.max_player_ball_distance = 70
@@ -32,23 +32,14 @@ class Tracker:
                     tracks[object][frame_num][track_id]['position'] = position
     
 
-    def detect_frames(self, frames):
-        batch_size = 20
+    def detect_frames(self, frames, batch_size=20, conf=0.2):
         detections = []
         for i in range(0, len(frames), batch_size):
-            detections_batch = self.model.predict(frames[i:i+batch_size], conf=0.1)
-            detections += detections_batch
+            detections.extend(self.model.predict(frames[i:i+batch_size], conf=conf))
+        return detections
             
 
-        return detections
-
-    def get_object_tracks(self, frames, read_from_stub=False, stub_path=None):
-        
-        if read_from_stub and stub_path is not None and os.path.exists(stub_path):
-            with open(stub_path, 'rb') as f:
-                tracks = pickle.load(f)
-            return tracks
-        
+    def get_object_tracks(self, frames):
         detections = self.detect_frames(frames)
 
         tracks = {
@@ -57,13 +48,12 @@ class Tracker:
             'referees': [],
             'ball': []
         }
+
+        cls_names = getattr(self.model, "names", None)
+
         # Loop through each frame
         for frame_num, detection in enumerate(detections):
-            cls_names = detection.names
-            cls_names_inv = {v: k for k, v in cls_names.items()}
-
             detection_supervision = sv.Detections.from_ultralytics(detection)
-
             detection_with_tracks = self.tracker.update_with_detections(detection_supervision)
 
             tracks['players'].append({})
@@ -90,13 +80,9 @@ class Tracker:
 
                 if cls_names[cls_id] == 'ball':
                     tracks['ball'][frame_num][1] = {'bbox': bbox}
-        
-        # Optionally save the tracks to a stub file
-        if stub_path is not None:
-            with open(stub_path, 'wb') as f:
-                pickle.dump(tracks, f)
 
         return tracks
+
 
     def interpolate_ball_positions(self, ball_tracks, box_size=(20,20)):
         """
