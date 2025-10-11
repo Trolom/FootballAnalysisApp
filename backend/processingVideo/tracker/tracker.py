@@ -18,24 +18,54 @@ class Tracker:
 
 
     def add_position_to_track(self, tracks):
-        # Iterate through each object type (players, goalkeepers, referees, ball)
-        for object, object_tracks in tracks.items():
-            # Iterate through each frame's tracking data for the current object type
-            for frame_num, track in enumerate(object_tracks):
-                # Iterate through each tracked object in the current frame
-                for track_id, track_info in track.items():
-                    bbox = track_info['bbox']
-                    if object == 'ball':
-                       position = get_center_of_bbox(bbox)
+        for obj, obj_tracks in tracks.items():
+            for frame_num, track in enumerate(obj_tracks):
+                for track_id, info in track.items():
+                    box = info.get('bbox')
+                    if box is None or len(box) != 4:
+                        continue
+                    if obj == 'ball':
+                        pos = get_center_of_bbox(box)
                     else:
-                       position = get_foot_position(bbox)
-                    tracks[object][frame_num][track_id]['position'] = position
-    
+                        pos = get_foot_position(box)
+                    info['position'] = pos
+        
 
-    def detect_frames(self, frames, batch_size=20, conf=0.2):
+    def detect_frames(self, frames, batch_size=24, conf=0.2, min_bs=1):
         detections = []
-        for i in range(0, len(frames), batch_size):
-            detections.extend(self.model.predict(frames[i:i+batch_size], conf=conf))
+        i = 0
+        n = len(frames)
+
+        while i < n:
+            bs = min(batch_size, n - i)  # cap at remaining frames
+
+            while bs >= min_bs:
+                try:
+                    batch = frames[i:i+bs]
+                    outs = self.model.predict(batch, conf=conf, verbose=False)
+                    detections.extend(outs)
+                    i += bs
+                    break  # processed this chunk, move to next
+                except RuntimeError as e:
+                    # Typical PyTorch CUDA OOM path
+                    if "out of memory" in str(e).lower():
+                        # try smaller batch next
+                        try:
+                            import torch
+                            torch.cuda.empty_cache()
+                        except Exception:
+                            pass
+                        bs = max(min_bs, bs // 2)
+                        if bs == min_bs:
+                            # if we’re already at min and still OOM, retry once more;
+                            # if it fails again, re-raise below
+                            continue
+                    else:
+                        raise
+            else:
+                # We exhausted the inner loop (even min_bs failed)
+                raise RuntimeError("detect_frames: OOM even at min batch size.")
+
         return detections
             
 

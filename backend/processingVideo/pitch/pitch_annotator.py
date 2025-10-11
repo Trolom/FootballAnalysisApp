@@ -91,12 +91,42 @@ class PitchAnnotator:
 
         return canvas
 
-    def transform_positions(self, track_dict, transformer): # helper function
-            # track_dict: {id: {'position': (x,y), ...}, ...}
-            pts = np.array([info["position"] for info in track_dict.values()], dtype=np.float32)
-            if pts.size:
-                return transformer.transform_points(points=pts)
+    def tx(self, track_dict, transformer) -> np.ndarray:
+        """
+        Robust image->pitch transform for a frame's track dict.
+        - Accepts dicts like {id: {...}} or lists of dicts
+        - Uses 'position' when present; falls back to 'xy'/'center' or bbox center
+        - Returns (0,2) array if no points / no transformer
+        """
+        if transformer is None or not track_dict:
             return np.empty((0, 2), dtype=np.float32)
+
+        # Iterate safely over dict or list
+        it = track_dict.values() if isinstance(track_dict, dict) else track_dict
+
+        pts = []
+        for info in it:
+            if not isinstance(info, dict):
+                continue
+
+            # 1) prefer explicit point
+            p = info.get("position") or info.get("xy") or info.get("center")
+
+            # 2) fallback: derive center from a bbox-like field
+            if p is None:
+                box = info.get("bbox") or info.get("xyxy") or info.get("box")
+                if box is not None and len(box) == 4:
+                    x1, y1, x2, y2 = map(float, box)
+                    p = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
+
+            if p is not None:
+                pts.append(p)
+
+        if not pts:
+            return np.empty((0, 2), dtype=np.float32)
+
+        pts = np.asarray(pts, dtype=np.float32).reshape(-1, 2)
+        return transformer.transform_points(points=pts)
     
 
     def annotate_tactical_board_from_result(
@@ -139,9 +169,9 @@ class PitchAnnotator:
         player_dict  = tracks["players"][frame_idx]
         referee_dict = tracks["referees"][frame_idx]
 
-        pitch_ball    = self.transform_positions(ball_dict, transformer)
-        pitch_players = self.transform_positions(player_dict, transformer)
-        pitch_refs    = self.transform_positions(referee_dict, transformer)
+        pitch_ball    = self.tx(ball_dict, transformer)
+        pitch_players = self.tx(player_dict, transformer)
+        pitch_refs    = self.tx(referee_dict, transformer)
 
         # 4) draw on cached base
         board = self.BASE_PITCH.copy()
@@ -221,7 +251,7 @@ class PitchAnnotator:
 
         player_dict  = tracks["players"][frame_idx]
 
-        pitch_players = self.transform_positions(player_dict, transformer)
+        pitch_players = self.tx(player_dict, transformer)
         if pitch_players.size == 0:
             return self.BASE_PITCH.copy()
 
@@ -240,8 +270,7 @@ class PitchAnnotator:
             padding=50,
             scale=0.1,
             pitch=self.BASE_PITCH.copy(),
-            # if you added 'step' param to your improved function; otherwise remove it
-            step=vor_step  # <-- comment out if your signature doesn't include it
+            
         )
         return board
 
@@ -298,19 +327,14 @@ class PitchAnnotator:
             frame_annotated = self.vertex_annotator.annotate(scene=frame_annotated, key_points=kp_all)
 
         # 4) transform tracks (image->pitch)
-        def _tx(track_dict):
-            if T_i2p is None or not track_dict:
-                return np.empty((0, 2), np.float32)
-            pts = np.array([info["position"] for info in track_dict.values()], dtype=np.float32)
-            return T_i2p.transform_points(points=pts) if pts.size else np.empty((0, 2), np.float32)
 
         ball_dict    = tracks["ball"][frame_idx]
         player_dict  = tracks["players"][frame_idx]
         referee_dict = tracks["referees"][frame_idx]
 
-        pitch_ball    = _tx(ball_dict)
-        pitch_players = _tx(player_dict)
-        pitch_refs    = _tx(referee_dict)
+        pitch_ball    = self.tx(ball_dict, T_i2p)
+        pitch_players = self.tx(player_dict, T_i2p)
+        pitch_refs    = self.tx(referee_dict, T_i2p)
 
         # 5) tactical board
         tactical_board = draw_points_on_pitch(

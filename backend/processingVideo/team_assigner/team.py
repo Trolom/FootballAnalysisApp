@@ -51,35 +51,35 @@ class TeamClassifier:
         #self.features_model = SiglipVisionModel.from_pretrained(SIGLIP_MODEL_PATH).to(device)
         #self.processor = AutoProcessor.from_pretrained(SIGLIP_MODEL_PATH, use_fast=True)
         self.features_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
-        self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", use_fast=True)
         self.reducer = umap.UMAP(n_components=3)
         self.cluster_model = KMeans(n_clusters=2)
 
 
     def extract_features(self, crops: List[np.ndarray]) -> np.ndarray:
         """
-        Extract features from a list of image crops using the pre-trained SiglipVisionModel.
-        Returns: np.ndarray: Extracted features as a numpy array.
+        Extract image features using CLIP fast image processor.
+        Returns: (N, D) numpy array of embeddings.
         """
-        crops = [sv.cv2_to_pillow(crop) for crop in crops]
-        batches = create_batches(crops, self.batch_size)
+        if not crops:
+            return np.empty((0, 512), dtype=np.float32)  # 512 for ViT-B/32
+
+        # Ensure PIL images (fast processor accepts PIL/np)
+        crops_pil = [sv.cv2_to_pillow(c) for c in crops]
+
         data = []
         with torch.no_grad():
-            for batch in tqdm(batches, desc='Embedding extraction'):
-                #inputs = self.processor(
-                #    images=batch, return_tensors="pt").to(self.device)
-                inputs = self.processor(
-                    images=batch,
-                    text=["a photo"] * len(batch),  # Dummy text for each image
-                    return_tensors="pt",
-                    padding=True
-                ).to(self.device)
-                outputs = self.features_model(**inputs)
-                embeddings = outputs.image_embeds.cpu().numpy()
-                #embeddings = torch.mean(outputs.last_hidden_state, dim=1).cpu().numpy()
-                data.append(embeddings)
+            for batch in tqdm(create_batches(crops_pil, self.batch_size), desc="Embedding extraction"):
+                # Fast image preprocessing
+                pixel_values = self.processor(images=batch, return_tensors="pt").pixel_values.to(self.device)
 
-        return np.concatenate(data)
+                # Get image embeddings directly (no text needed)
+                feats = self.features_model.get_image_features(pixel_values=pixel_values)
+
+                data.append(feats.cpu().numpy())
+
+        return np.concatenate(data, axis=0)
+
 
     def fit(self, crops: List[np.ndarray]) -> None:
         """
