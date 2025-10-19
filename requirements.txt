@@ -11,10 +11,10 @@ redis
 # CV / video
 opencv-python-headless==4.10.0.84
 python-dotenv~=1.0.0
-numpy>=2.0,<2.3
-moviepy
+numpy==2.2.6
+moviepy==1.0.3
 ffmpeg-python
-numpy
+pandas
 
 # Deep learning (CPU default wheel).
 # If you need CUDA, see note below to install from the PyTorch index.

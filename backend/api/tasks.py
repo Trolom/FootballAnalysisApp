@@ -1,15 +1,14 @@
-# processing/tasks.py
-from pathlib import Path
+# tasks.py
 from celery import shared_task
+from pathlib import Path
 from django.conf import settings
 from .models import VideoJob
 
-from processingVideo import (
-    read_video, save_video,
-    Tracker, TeamAssigner,
-    PitchAnnotator, SoccerPitchConfiguration,
-    get_model_path,
-)
+# === your pipeline modules ===
+from processingVideo.utils import read_video, save_video
+from processingVideo.tracker import Tracker
+from processingVideo.team_assigner import TeamAssigner
+from processingVideo.pitch import PitchAnnotator, SoccerPitchConfiguration
 
 try:
     import torch
@@ -17,92 +16,82 @@ try:
 except Exception:
     DEVICE = "cpu"
 
-
-def _out_dir(job_id: int) -> Path:
-    p = Path(settings.MEDIA_ROOT) / "outputs" / str(job_id)
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
+VALID_PRODUCTS = {"detections", "pitch_edges", "tactical_board", "voronoi"}
 
 @shared_task
-def process_video_task(job_id: int, produce: list[str]):
-    """
-    Always:
-      - read video
-      - run tracking + team assignment  (tracks required for tactical/voronoi, and cheap to have ready)
-
-    Then, conditionally:
-      - 'detections'      -> output_video.avi
-      - 'pitch_edges'     -> pitch_with_edges.avi
-      - 'tactical_board'  -> match_with_tactical_board.avi
-      - 'voronoi'         -> match_with_voronoi.avi
-    """
+def process_video_task(job_id: int, requested_outputs: list[str]):
     job = VideoJob.objects.get(id=job_id)
+
     try:
-        out_dir = _out_dir(job_id)
-        in_path = Path(job.original.path)
+        # ---- I/O paths ----
+        src_path = job.original.path
+        out_dir = Path(settings.MEDIA_ROOT) / "outputs" / str(job.id)
+        out_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1) Read frames once
-        video_frames = read_video(str(in_path))
+        # ---- models & helpers ----
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        player_model_path = "processingVideo/models/player_detection.pt"
+        field_model_path  = "processingVideo/models/field_detection.pt"
+        CONFIG = SoccerPitchConfiguration()
 
-        # 2) ALWAYS do tracking + team assignment (so downstream has tracks)
-        tracker = Tracker(get_model_path("player_detection.pt"))
+        # ---- 1) read frames ----
+        video_frames = read_video(src_path)
+
+        # ---- 2) tracking + team assignment ----
+        tracker = Tracker(player_model_path)
         tracks = tracker.get_object_tracks(video_frames)
         tracker.add_position_to_track(tracks)
 
-        team_assigner = TeamAssigner(device=DEVICE)
+        team_assigner = TeamAssigner(device=device)
         team_assigner.assign_teams(tracks, video_frames)
 
-        outputs = {}
+        # ---- 3) pitch model (run once, reused) ----
+        pitch_ann = PitchAnnotator(CONFIG=CONFIG, model_path=field_model_path)
+        pitch_results = pitch_ann.annotate_video_batched(video_frames=video_frames, batch_size=8)
 
-        # 3) Detections overlay, if requested
-        if "detections" in produce:
-            det_frames = tracker.draw_annotations(video_frames, tracks)
-            det_path = out_dir / "output_video.avi"
-            save_video(det_frames, str(det_path))
-            outputs["detections"] = f"outputs/{job_id}/{det_path.name}"
+        outputs_map: dict[str, str] = {}
 
-        # 4) Pitch-based products — run batched pitch model only if needed
-        need_pitch = any(k in produce for k in ("pitch_edges", "tactical_board", "voronoi"))
-        if need_pitch:
-            CONFIG = SoccerPitchConfiguration()
-            pitch_ann = PitchAnnotator(
-                CONFIG=CONFIG,
-                model_path=get_model_path("field_detection.pt"),
-            )
-            results = pitch_ann.annotate_video_batched(video_frames=video_frames, batch_size=8)
+        # ---- 4) write only what was requested ----
+        if "detections" in requested_outputs:
+            det_frames = tracker.draw_annotations(video_frames, tracks)  # players/teams/ball
+            det_rel = f"outputs/{job.id}/detections.mp4"
+            save_video(det_frames, str(Path(settings.MEDIA_ROOT) / det_rel))
+            outputs_map["detections"] = det_rel
 
-            if "pitch_edges" in produce:
-                pd_frames = [pitch_ann.annotate_frame_from_result(f, r) for f, r in zip(video_frames, results)]
-                pd_path = out_dir / "pitch_with_edges.avi"
-                save_video(pd_frames, str(pd_path))
-                outputs["pitch_edges"] = f"outputs/{job_id}/{pd_path.name}"
+        if "pitch_edges" in requested_outputs:
+            pe_frames = [pitch_ann.annotate_frame_from_result(f, r) for f, r in zip(video_frames, pitch_results)]
+            pe_rel = f"outputs/{job.id}/pitch_edges.mp4"
+            save_video(pe_frames, str(Path(settings.MEDIA_ROOT) / pe_rel))
+            outputs_map["pitch_edges"] = pe_rel
 
-            if "tactical_board" in produce:
-                tb_frames = []
-                for i, (f, r) in enumerate(zip(video_frames, results)):
-                    tb = pitch_ann.annotate_tactical_board_from_result(f, tracks, i, CONFIG, r, kp_thresh=0.5)
-                    tb_frames.append(tb)
-                tb_path = out_dir / "match_with_tactical_board.avi"
-                save_video(tb_frames, str(tb_path))
-                outputs["tactical_board"] = f"outputs/{job_id}/{tb_path.name}"
+        if "tactical_board" in requested_outputs:
+            tb_frames = [
+                pitch_ann.annotate_tactical_board_from_result(f, tracks, i, CONFIG, r, kp_thresh=0.5)
+                for i, (f, r) in enumerate(zip(video_frames, pitch_results))
+            ]
+            tb_rel = f"outputs/{job.id}/tactical_board.mp4"
+            save_video(tb_frames, str(Path(settings.MEDIA_ROOT) / tb_rel))
+            outputs_map["tactical_board"] = tb_rel
 
-            if "voronoi" in produce:
-                vb_frames = []
-                for i, (f, r) in enumerate(zip(video_frames, results)):
-                    vb = pitch_ann.annotate_voronoi_from_result(f, tracks, i, CONFIG, r, kp_thresh=0.5, vor_step=3)
-                    vb_frames.append(vb)
-                vb_path = out_dir / "match_with_voronoi.avi"
-                save_video(vb_frames, str(vb_path))
-                outputs["voronoi"] = f"outputs/{job_id}/{vb_path.name}"
+        if "voronoi" in requested_outputs:
+            vb_frames = [
+                pitch_ann.annotate_voronoi_from_result(f, tracks, i, CONFIG, r, kp_thresh=0.5, vor_step=3)
+                for i, (f, r) in enumerate(zip(video_frames, pitch_results))
+            ]
+            vb_rel = f"outputs/{job.id}/voronoi.mp4"
+            save_video(vb_frames, str(Path(settings.MEDIA_ROOT) / vb_rel))
+            outputs_map["voronoi"] = vb_rel
 
-        job.outputs = outputs
+        if not outputs_map:
+            raise RuntimeError("No valid outputs requested/produced")
+
+        job.outputs = outputs_map
         job.status = "done"
         job.error = ""
-        job.save()
+        job.save(update_fields=["outputs", "status", "error"])
 
     except Exception as e:
         job.status = "failed"
         job.error = str(e)
-        job.save()
+        job.save(update_fields=["status", "error"])
         raise

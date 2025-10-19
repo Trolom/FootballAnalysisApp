@@ -73,18 +73,26 @@ def draw_triangle(frame, bbox, color):
 
 
 def draw_team_ball_control(frame, frame_num, team_ball_control):
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (1350, 850), (1900, 970), (255, 255, 255), -1)
-        alpha = 0.4
-        cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
-        team_ball_control = np.array(team_ball_control)
 
-        team_1_num_frames = team_ball_control[team_ball_control == 0].shape[0]
-        team_2_num_frames = team_ball_control[team_ball_control == 1].shape[0]
-        team_1 = team_1_num_frames / (team_1_num_frames + team_2_num_frames)
-        team_2 = team_2_num_frames / (team_1_num_frames + team_2_num_frames)
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (1350, 850), (1900, 970), (255, 255, 255), -1)
+    alpha = 0.4
+    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
-        cv2.putText(frame, f"Team 1 ball control: {team_1*100:.2f}%", (1400, 900), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 3)
-        cv2.putText(frame, f"Team 2 ball control: {team_2*100:.2f}%", (1400, 950), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 3)
+    vals = np.asarray(team_ball_control)
 
-        return frame
+    team_1_num_frames = int((vals == 0).sum())
+    team_2_num_frames = int((vals == 1).sum())
+    total = team_1_num_frames + team_2_num_frames
+
+    if total == 0:
+        team_1 = 0.0
+        team_2 = 0.0
+    else:
+        team_1 = team_1_num_frames / total
+        team_2 = team_2_num_frames / total
+
+    cv2.putText(frame, f"Team 1 ball control: {team_1*100:.2f}%", (1400, 900), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 3)
+    cv2.putText(frame, f"Team 2 ball control: {team_2*100:.2f}%", (1400, 950), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 3)
+
+    return frame

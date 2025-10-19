@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('status', models.CharField(choices=[('pending', 'pending'), ('processing', 'processing'), ('done', 'done'), ('failed', 'failed')], default='pending', max_length=16)),
                 ('original', models.FileField(upload_to='uploads/')),
-                ('outputs', models.JSONField(blank=True, default=list)),
+                ('outputs', models.JSONField(blank=True, default=dict)),
                 ('error', models.TextField(blank=True, default='')),
             ],
         ),

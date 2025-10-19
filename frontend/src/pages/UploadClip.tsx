@@ -69,6 +69,7 @@ export default function UploadClip() {
   const [meta, setMeta] = useState({ match: "", competition: "" });
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (files.length > 0) {
@@ -119,15 +120,56 @@ export default function UploadClip() {
     setMeta({ match: "", competition: "" });
   };
 
+  // --- THIS IS THE CORRECTED FUNCTION ---
+  const handleUploadAndAnalyze = async () => {
+    if (files.length === 0) return;
+
+    setIsUploading(true);
+    setError(null);
+
+    const formData = new FormData();
+    formData.append("file", files[0].file);
+    
+    // --- FIX APPLIED HERE ---
+    // 1. Define which videos we want the backend to generate.
+    const desiredOutputs = "detections,pitch_edges,tactical_board,voronoi";
+    // 2. Build the final API URL, adding our request as a query parameter.
+    const apiUrl = `http://127.0.0.1:8000/api/jobs/?produce=${desiredOutputs}`;
+    
+    try {
+      // 3. Use the new URL in the fetch call.
+      const response = await fetch(apiUrl, { 
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Upload failed. Please try again.");
+      }
+
+      navigate("/analyzing", {
+        state: {
+          jobId: data.id,
+          originalFileName: files[0].file.name,
+          match: meta.match,
+          competition: meta.competition,
+        },
+      });
+
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred.");
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="relative min-h-dvh px-4 py-8 md:py-16 flex items-center justify-center">
-      {/* ===== NEW SIMPLE DOT-GRID BACKGROUND ===== */}
       <div
         className="absolute inset-0 -z-10 [background-image:radial-gradient(circle_at_1px_1px,theme(colors.zinc.300/50)_1px,transparent_0)] dark:[background-image:radial-gradient(circle_at_1px_1px,theme(colors.zinc.700/50)_1px,transparent_0)] [background-size:1.5rem_1.5rem]"
         aria-hidden="true"
       />
-
-      {/* Main content card */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -144,7 +186,6 @@ export default function UploadClip() {
         </div>
 
         <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start">
-          {/* Left Column: Uploader / Preview */}
           <div className="w-full">
             <div {...getRootProps({ className: dropClasses })}>
               <input {...getInputProps()} />
@@ -171,7 +212,6 @@ export default function UploadClip() {
             )}
           </div>
 
-          {/* Right Column: Meta Form / Tips */}
           <div className="relative">
             <AnimatePresence initial={false} mode="wait">
               {hasFile ? (
@@ -204,15 +244,11 @@ export default function UploadClip() {
                   <div className="mt-6 flex flex-wrap items-center gap-4">
                     <button
                       type="button"
-                      disabled={!hasFile}
-                      onClick={() =>
-                        navigate("/analyzing", {
-                          state: { originalFileName: files[0].file.name, match: meta.match, competition: meta.competition },
-                        })
-                      }
+                      disabled={!hasFile || isUploading}
+                      onClick={handleUploadAndAnalyze}
                       className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-indigo-500 to-emerald-500 bg-[length:200%_auto] hover:bg-right focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                     >
-                      Upload & Analyze
+                      {isUploading ? "Uploading..." : "Upload & Analyze"}
                     </button>
                     <button
                       type="button"
