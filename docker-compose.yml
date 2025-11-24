@@ -14,19 +14,17 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      # Added 'db' here, as the backend needs the database
       - db
       - redis
     env_file:
       - .env
+    
 
   db:
-    image: postgres:15-alpine # Use the official PostgreSQL image
+    image: postgres:15-alpine 
     volumes:
-      # This named volume must be declared below
       - postgres_data:/var/lib/postgresql/data 
     environment:
-      # Ensure these match your Django settings.py
       POSTGRES_DB: app_database_name
       POSTGRES_USER: django_user
       POSTGRES_PASSWORD: a_secure_password_123
@@ -39,24 +37,40 @@ services:
       - "6379:6379"
 
   celery_worker:
-    # FIX: Set the context and dockerfile path to match the backend service
     build: 
-      context: ./backend             # Look for the build context in the 'backend' folder
-      dockerfile: Dockerfile         # Look for 'Dockerfile' inside the context
+      context: ./backend             
+      dockerfile: Dockerfile         
     command: celery -A config.celery_app worker --loglevel=INFO --pool=solo
     volumes:
-      # This volume path should also match the main application structure if code is shared
       - ./backend:/usr/src/app 
-      - media_data:/usr/src/app/media # Worker also needs access to media files for processing
+      - media_data:/usr/src/app/media 
     depends_on:
       - db                    
       - redis
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
 
-# ---------------------------------------------
-# REQUIRED: Define all named volumes here
-# ---------------------------------------------
+  frontend:
+    build: 
+      context: ./frontend            # Assuming React code is in a separate 'frontend' directory
+      dockerfile: Dockerfile         # Assumes a Dockerfile is in the 'frontend' directory
+    container_name: football-analysis-frontend
+    # Use 'npm run dev' to start the Vite development server
+    command: npm run dev 
+    volumes:
+      # Mount the local frontend code for hot reloading
+      - ./frontend:/usr/src/app 
+      # Mount node_modules separately to prevent performance issues
+      - /usr/src/app/node_modules 
+    ports:
+      # Map host port 3000 to container port 5173 (Vite default or configured port)
+      - "3000:5173" 
+    depends_on:
+      - backend # Frontend needs the backend API to be running
+    environment:
+      # You can pass the backend URL here, or use proxy in vite.config.js
+      VITE_BACKEND_URL: http://backend:8000 
+
 volumes:
   media_data:
   postgres_data:
