@@ -14,11 +14,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     # Required for video processing (MoviePy/some OpenCV features)
     ffmpeg \
+    \
+    # ------------------------------------------------------------------
+    # FIX: Install system libraries for PostgreSQL connection (libpq-dev)
+    # This ensures psycopg2 can load its dependencies.
+    # ------------------------------------------------------------------
+    libpq-dev \
+    build-essential \
+    \
     # Cleanup to keep image size small
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# The pip install step will now find the required system libraries
+RUN pip install --upgrade pip && pip install -r requirements.txt 
 
 COPY . .
 
