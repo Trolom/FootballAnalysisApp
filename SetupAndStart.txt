@@ -18,3 +18,6 @@ celery -A config.celery_app worker --loglevel=INFO --pool=solo
 Kaggle dataset: https://www.kaggle.com/datasets/saberghaderi/-dfl-bundesliga-460-mp4-videos-in-30sec-csv
 
 Get models from drive
+
+Redis(in case it is stopped)
+sudo systemctl start redis-server

@@ -9,6 +9,7 @@ celery
 redis
 
 # CV / video
+PyYAML==6.0.1
 opencv-python-headless==4.10.0.84
 python-dotenv~=1.0.0
 numpy==2.2.6

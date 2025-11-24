@@ -1,0 +1,29 @@
+
+services:
+
+  backend:
+    build: 
+      context: ./backend 
+      dockerfile: Dockerfile
+    container_name: football-analysis-backend
+    command: python3 manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/usr/src/app 
+      - media_data:/usr/src/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    env_file:
+      - .env
+
+
+  redis:
+    image: redis:7-alpine
+    container_name: football-analysis-redis
+    ports:
+      - "6379:6379"
+
+
+volumes:
+  media_data: 
