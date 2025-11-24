@@ -27,3 +27,18 @@ backend/media/
 
 runs/
 venv/
+
+# Python compiled files
+/__pycache__
+*.pyc
+*.pyo
+
+# Distribution / Build files
+*.egg-info/
+*.dist-info/
+build/
+dist/
+
+# Operating System specific files
+.DS_Store
+Thumbs.db
