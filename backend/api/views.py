@@ -52,7 +52,7 @@ class VideoJobViewSet(viewsets.ModelViewSet):
         job.save()
 
         # pass the selection to Celery
-        # process_video_task.delay(job.id, sorted(list(selected)))
+        process_video_task.delay(job.id, sorted(list(selected)))
         return Response(VideoJobSerializer(job).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"])
