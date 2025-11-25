@@ -52,7 +52,7 @@ class VideoJobViewSet(viewsets.ModelViewSet):
         job.save()
 
         # pass the selection to Celery
-        process_video_task.delay(job.id, sorted(list(selected)))
+        # process_video_task.delay(job.id, sorted(list(selected)))
         return Response(VideoJobSerializer(job).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"])
@@ -69,21 +69,7 @@ class VideoJobViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def download(self, request, pk=None):
-        """
-        Download generated file(s) as attachments.
 
-        Query params:
-        - which=...  (comma-separated keys from job.outputs)
-            Examples:
-            which=detections
-            which=pitch_edges
-            which=tactical_board,voronoi
-
-        - If multiple or omitted, a ZIP is streamed.
-
-        Optional:
-        - cleanup=1  -> delete served file(s) after response is prepared
-        """
         job = self.get_object()
         if job.status != "done" or not job.outputs:
             raise Http404("Outputs not ready")
