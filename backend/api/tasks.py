@@ -22,6 +22,8 @@ VALID_PRODUCTS = {"detections", "pitch_edges", "tactical_board", "voronoi"}
 def process_video_task(job_id: int, requested_outputs: list[str]):
     job = VideoJob.objects.get(id=job_id)
 
+    print(f"PyTorch device configured for Celery worker: {DEVICE}")
+
     try:
         # ---- I/O paths ----
         src_path = job.original.path

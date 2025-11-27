@@ -17,7 +17,12 @@ celery -A config.celery_app worker --loglevel=INFO --pool=solo
 
 Kaggle dataset: https://www.kaggle.com/datasets/saberghaderi/-dfl-bundesliga-460-mp4-videos-in-30sec-csv
 
-Get models from drive
+Get models from drive, both player and pitch models
 
-Redis(in case it is stopped)
-sudo systemctl start redis-server
+Helpful for installing NVIDIA Container Toolkit:
+https://www.server-world.info/en/note?os=Ubuntu_24.04&p=nvidia&f=3
+
+After merging docker branch:
+
+Laptop with GPU: docker compose up
+Laptop without GPU: docker compose -f docker-compose.yml -f docker-compose.cpu.yml up

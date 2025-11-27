@@ -1,0 +1,9 @@
+services:
+  backend:
+    # Overrides the gpus: all setting from the main file by providing an empty list
+    
+    gpus: []
+  
+  celery_worker:
+    # Ensures the worker runs on CPU only.
+    gpus: []
