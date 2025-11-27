@@ -25,7 +25,7 @@ The project focuses on achieving a fully functional pipeline that combines front
 
 The application follows a standard microservices pattern orchestrated by Docker Compose.
 
-**| Layer | Technology | Purpose |**
+| Layer | Technology | Purpose |
 |-------|------------|---------|
 | Frontend | React + Vite | User interface for file upload, interactive visualization, and HTTP Polling for status updates. |
 | Backend/API | Django + DRF (Django REST Framework) | API endpoints, database models (VideoJob), and serving media outputs. |
@@ -47,8 +47,8 @@ The application follows a standard microservices pattern orchestrated by Docker 
 
 ### Accessing the Application
 
-**| Service | Access Point | Notes |**
-| --- | --- |
+| Service | Access Point | Notes |
+| --- | --- | --- |
 | Frontend UI | http://localhost:3000 | The main user interface for uploads and viewing status. |
 | Django API | http://localhost:8000 | The backend API root (used by the frontend). |
-| Worker Logs | docker compose logs -f celery_worker | View real-time progress of video analysis tasks.
+| Worker Logs | docker compose logs -f celery_worker | View real-time progress of video analysis tasks. |
