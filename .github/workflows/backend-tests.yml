@@ -17,6 +17,23 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # we need to create a database service
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: app_database_name
+          POSTGRES_USER: django_user
+          POSTGRES_PASSWORD: a_secure_password_123
+        ports:
+          - 5432:5432
+        # simple health check to wait until DB is ready before running tests
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -25,6 +42,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
+
     - name: Install System Libraries
       run: |
         sudo apt-get update
@@ -50,7 +68,11 @@ jobs:
       env:
         SECRET_KEY: "test_secret_key"
         DEBUG: "True"
-        DATABASE_URL: "sqlite:///db.sqlite3" 
+        POSTGRES_HOST: "localhost" 
+        POSTGRES_DB: "app_database_name"
+        POSTGRES_USER: "django_user"
+        POSTGRES_PASSWORD: "a_secure_password_123"
+        POSTGRES_PORT: "5432"
         CELERY_BROKER_URL: "redis://localhost:6379/0"
       run: |
         cd backend
@@ -60,7 +82,11 @@ jobs:
       env:
         SECRET_KEY: "test_secret_key"
         DEBUG: "True"
-        DATABASE_URL: "sqlite:///db.sqlite3"
+        POSTGRES_HOST: "localhost"
+        POSTGRES_DB: "app_database_name"
+        POSTGRES_USER: "django_user"
+        POSTGRES_PASSWORD: "a_secure_password_123"
+        POSTGRES_PORT: "5432"
         CELERY_BROKER_URL: "redis://localhost:6379/0"
       run: |
         cd backend
