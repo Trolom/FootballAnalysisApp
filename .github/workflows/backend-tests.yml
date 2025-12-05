@@ -1,0 +1,93 @@
+#what it does
+# It triggers whenever we push code to "main" or any "feature" branch.
+# It sets up a Linux computer (Ubuntu) on GitHub.
+# It installs system tools that our code needs.
+# It installs Python and our requirements.txt.
+# It runs the Django tests we have inside the backend/api/tests.
+
+name: Backend Tests
+
+on:
+  push:
+    branches: [ "main", "feature/*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # we need to create a database service
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: app_database_name
+          POSTGRES_USER: django_user
+          POSTGRES_PASSWORD: a_secure_password_123
+        ports:
+          - 5432:5432
+        # simple health check to wait until DB is ready before running tests
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install System Libraries
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgl1 \
+          libglib2.0-0 \
+          libsm6 \
+          libxrender1 \
+          libxext6 \
+          ffmpeg \
+          gdal-bin \
+          libgdal-dev \
+          build-essential \
+          gcc \
+          g++
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+
+    - name: Run Django System Checks
+      env:
+        SECRET_KEY: "test_secret_key"
+        DEBUG: "True"
+        POSTGRES_HOST: "localhost" 
+        POSTGRES_DB: "app_database_name"
+        POSTGRES_USER: "django_user"
+        POSTGRES_PASSWORD: "a_secure_password_123"
+        POSTGRES_PORT: "5432"
+        CELERY_BROKER_URL: "redis://localhost:6379/0"
+      run: |
+        cd backend
+        python manage.py check
+
+    - name: Run Tests
+      env:
+        SECRET_KEY: "test_secret_key"
+        DEBUG: "True"
+        POSTGRES_HOST: "localhost"
+        POSTGRES_DB: "app_database_name"
+        POSTGRES_USER: "django_user"
+        POSTGRES_PASSWORD: "a_secure_password_123"
+        POSTGRES_PORT: "5432"
+        CELERY_BROKER_URL: "redis://localhost:6379/0"
+      run: |
+        cd backend
+        python manage.py test api.tests.test_jobs_api
