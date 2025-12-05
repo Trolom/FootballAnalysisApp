@@ -5,6 +5,7 @@ ENV DJANGO_SETTINGS_MODULE=config.settings
 
 WORKDIR /usr/src/app
 
+# Added gdal-bin and libgdal-dev to the install list below
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -12,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
     libxext6 \
     ffmpeg \
-    \
     libpq-dev \
     build-essential \
-    \
+    gdal-bin \
+    libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
