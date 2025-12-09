@@ -23,6 +23,13 @@ class VideoJobViewSet(viewsets.ModelViewSet):
         f = request.FILES.get("file")
         if not f:
             return Response({"detail": "file required"}, status=400)
+        
+        # Strictly validate file extension to ensure only video formats are accepted
+        valid_extensions = {'.mp4', '.mov', '.avi'}
+        import os
+        ext = os.path.splitext(f.name)[1].lower()
+        if ext not in valid_extensions:
+            return Response({"detail": "Invalid file format. Only mp4, mov, and avi are allowed."}, status=400)
 
         # read desired outputs from query (?produce=...)
         raw = request.query_params.get("produce", "") or ""
