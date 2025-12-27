@@ -42,3 +42,7 @@ supervision
 more_itertools
 scikit-learn
 umap-learn
+
+daphne==4.1.2
+channels==4.1.0
+channels-redis==4.2.0

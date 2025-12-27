@@ -1,114 +1,138 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// Define a more accurate type for the state passed to this page
-type AnalyzingState = {
-  jobId?: number; // The REAL job ID from the upload page
-  originalFileName?: string;
-  match?: string;
-  competition?: string;
-};
-
 export default function Analyzing() {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = (location.state || {}) as AnalyzingState;
-  const { jobId } = state;
+  const { jobId, originalFileName, match, competition } = (location.state || {}) as any;
 
-  // This progress is now just for show, the real logic is in the polling effect
   const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState("Connecting to server...");
 
   useEffect(() => {
-    // If we land on this page without a jobId, something is wrong. Redirect to upload.
+    // 1. Safety check: if no Job ID, we can't track anything
     if (!jobId) {
       navigate("/upload");
       return;
     }
 
-    // This interval will poll the backend for the job status
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`http://127.0.0.1:8000/api/jobs/${jobId}/`);
-        if (!response.ok) {
-           // Handle network errors
-           throw new Error('Network response was not ok');
-        }
-        const data = await response.json();
+    // 2. Establish WebSocket connection
+    // We connect to the 'backend' service via localhost since the browser is outside Docker
+    const socket = new WebSocket(`ws://127.0.0.1:8000/ws/jobs/${jobId}/`);
 
-        // --- Main Logic ---
-        if (data.status === "done") {
-          clearInterval(pollInterval); // Stop polling
-          setProgress(100);
+    socket.onopen = () => {
+      setStatusText("Initializing analysis...");
+    };
 
-          // Give a moment to show 100% then navigate to results
-          setTimeout(() => {
-            navigate("/results", {
-              state: {
-                ...state, // Pass along original info (filename, match, etc.)
-                jobData: data, // Pass the full, final job data from the API
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      // Update the progress bar percentage
+      if (data.progress !== undefined) {
+        setProgress(data.progress);
+      }
+      
+      // Update descriptive text based on backend progress
+      if (data.status === "processing") {
+        if (data.progress < 30) setStatusText("Reading video frames...");
+        else if (data.progress < 60) setStatusText("Detecting players and ball...");
+        else if (data.progress < 80) setStatusText("Assigning teams...");
+        else setStatusText("Generating visualizations...");
+      }
+
+      // Handle Completion
+      if (data.status === "done") {
+        setProgress(100);
+        setTimeout(() => {
+          navigate("/results", {
+            state: {
+              ...location.state,
+              jobData: {
+                id: jobId,           // CRITICAL: Ensure this is here
+                outputs: data.outputs,
+                status: data.status
               },
-            });
-          }, 800);
+            },
+          });
+        }, 800);
+      }
 
-        } else if (data.status === "failed" || data.status === "error") {
-          clearInterval(pollInterval);
-          // In a real app, you might navigate to an error page or show a modal
-          alert(`Analysis failed: ${data.error || 'Unknown error'}`);
-          navigate("/upload");
-
-        } else {
-          // It's still "pending" or "processing", so we just update the visual progress bar
-          // Don't let the fake progress hit 100%, as that's reserved for a "done" status
-          setProgress((p) => Math.min(95, p + 5));
-        }
-      } catch (error) {
-        console.error("Polling error:", error);
-        clearInterval(pollInterval); // Stop polling on a network error
-        alert("Could not connect to the server to check status.");
+      // Handle Failure
+      if (data.status === "failed") {
+        alert(`Analysis failed: ${data.error || "Unknown error"}`);
         navigate("/upload");
       }
-    }, 2000); // Poll the backend every 2 seconds
+    };
 
-    // Cleanup function to stop polling if the user navigates away
-    return () => clearInterval(pollInterval);
-  }, [jobId, navigate, state]); // Effect dependencies
+    socket.onerror = (err) => {
+      console.error("WebSocket Error:", err);
+      setStatusText("Connection error. Retrying...");
+    };
+
+    // 3. Cleanup: Close socket if user leaves the page
+    return () => {
+      socket.close();
+    };
+  }, [jobId, navigate, location.state]);
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl space-y-6">
-            <div className="rounded-2xl border border-zinc-200/60 p-6 text-center dark:border-zinc-700/60">
-                <h1 className="text-3xl font-bold tracking-tight">Analyzing Your Clip</h1>
-                <p className="mt-2 text-zinc-600 dark:text-zinc-300">
-                    This may take a moment. Advanced visualizations are being generated.
-                </p>
-            </div>
-
-            <div className="rounded-2xl border p-6 dark:border-zinc-700/60">
-                <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-zinc-300 border-t-transparent dark:border-zinc-700 dark:border-t-transparent" />
-                    <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">
-                            {state.originalFileName || "clip.mp4"}
-                        </div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                            {state.match ? `${state.match} • ` : ""} {state.competition || ""}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mt-6">
-                    <div className="h-2 w-full rounded-full bg-zinc-200 dark:bg-zinc-800">
-                        <div
-                            className="h-2 rounded-full bg-indigo-600 transition-[width] duration-300 dark:bg-indigo-400"
-                            style={{ width: `${progress}%` }}
-                        />
-                    </div>
-                    <div className="mt-2 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                        {progress}%
-                    </div>
-                </div>
-            </div>
+    <div className="min-h-dvh flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-4">
+      <div className="w-full max-w-lg">
+        {/* Header Section */}
+        <div className="text-center mb-8 space-y-2">
+          <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Analyzing Footage
+          </h2>
+          <div className="flex flex-col items-center text-zinc-500 dark:text-zinc-400">
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              {originalFileName || "video_clip.mp4"}
+            </span>
+            <span className="text-sm">
+              {match ? `${match} ` : ""}{competition ? `• ${competition}` : ""}
+            </span>
+          </div>
         </div>
+
+        {/* Main Status Card */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 shadow-xl shadow-zinc-200/50 dark:shadow-none">
+          <div className="flex justify-between items-end mb-4">
+            <div className="flex items-center gap-3">
+              {/* Spinning Loader */}
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+              <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
+                {statusText}
+              </span>
+            </div>
+            <span className="text-4xl font-black text-zinc-900 dark:text-zinc-100">
+              {progress}%
+            </span>
+          </div>
+
+          {/* Intuitive Progress Bar */}
+          <div className="relative h-4 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+            {/* Animated Gradient Fill */}
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 bg-[length:200%_100%] animate-shimmer transition-all duration-700 ease-out rounded-full"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          
+          <div className="mt-8 grid grid-cols-2 gap-4 text-center text-xs text-zinc-400 border-t border-zinc-100 dark:border-zinc-800 pt-6">
+            <div>
+              <p className="font-bold text-zinc-500 dark:text-zinc-300 uppercase tracking-widest">Device</p>
+              <p>GPU Accelerated</p>
+            </div>
+            <div>
+              <p className="font-bold text-zinc-500 dark:text-zinc-300 uppercase tracking-widest">Status</p>
+              <p>Live Streamed</p>
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-6 text-center text-sm text-zinc-400">
+          Please do not refresh the page while processing is active.
+        </p>
+      </div>
     </div>
   );
 }

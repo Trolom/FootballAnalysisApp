@@ -17,7 +17,13 @@ services:
       - redis
     env_file:
       - .env
-    gpus: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   db:
     image: postgres:15-alpine 
@@ -48,7 +54,13 @@ services:
       - redis
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
-    gpus: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   frontend:
     build: 
